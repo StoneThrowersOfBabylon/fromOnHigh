@@ -1,0 +1,13 @@
+# Elements (tiles)
+- Light
+- Lightning
+- Fire
+- Wind
+- Creature
+- Water
+- Plant
+- Earth
+- Stone
+- Metal
+- Ice
+- Dark
