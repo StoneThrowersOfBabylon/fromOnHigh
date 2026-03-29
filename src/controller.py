@@ -1,5 +1,6 @@
 import pygame
 import threading
+import random
 from config import FPS, ELEMENTS
 from hex import Hex
 from tile import Tile
@@ -36,7 +37,11 @@ class Controller:
 
         self.selected_city = False
         self.current_player = 0
-        self.founder = Character(get_random_passable_hex(self.grid), self.player_colors[self.current_player])
+        self.founder = Character(get_random_passable_hex(self.grid), self.player_colors[self.current_player], unit_type="founder", owner_id=self.current_player)
+        
+        self.units = []
+        self.turn_queue = []
+        self.current_action_entity = "CITY"
         self.instructions_text = f"Player {self.current_player + 1}'s turn. Click to move, Enter to found City."
         self.camera_x, self.camera_y = 0.0, 0.0
         self.hovered_tile = None
@@ -60,11 +65,13 @@ class Controller:
             "Peaceful Scholar",
             "Opportunistic Scavenger"
         ]
-        self.player_stats = [{'food': 5, 'wind': 1, 'research': 1, 'personality': personalities[i]} for i in range(self.num_players)]
+        self.player_stats = [{'resources': {e: 0 for e in ELEMENTS}, 'food': 5, 'wind': 1, 'research': 1, 'personality': personalities[i]} for i in range(self.num_players)]
 
     def handle_events(self):
+        screen_width = self.view.screen.get_width()
+        screen_height = self.view.screen.get_height()
         mouse_pos = pygame.mouse.get_pos()
-        hovered_hex = Hex.from_pixel(mouse_pos[0], mouse_pos[1], self.camera_x, self.camera_y)
+        hovered_hex = Hex.from_pixel(mouse_pos[0], mouse_pos[1], self.camera_x, self.camera_y, screen_width, screen_height)
         
         self.hovered_tile = None
         for t in self.grid:
@@ -96,13 +103,15 @@ class Controller:
                             self.audio.play('found_city')
                             self.current_player += 1
                             if self.current_player < self.num_players:
-                                self.founder = Character(get_random_passable_hex(self.grid), self.player_colors[self.current_player])
+                                self.founder = Character(get_random_passable_hex(self.grid), self.player_colors[self.current_player], unit_type="founder", owner_id=self.current_player)
                                 self.instructions_text = f"Player {self.current_player + 1}'s turn. Click to move, Enter to found City."
                             else:
                                 self.founder = None
                                 self.game_state = "PLAY"
                                 self.current_player = 0
                                 self.turn_start_time = pygame.time.get_ticks()
+                                self.turn_queue = ["CITY"] + [u for u in self.units if u.owner_id == self.current_player]
+                                self.current_action_entity = self.turn_queue.pop(0) if self.turn_queue else "CITY"
                                 self.instructions_text = f"Player {self.current_player + 1}'s turn. Main game phase."
                                 self.center_camera_on_current_player_city()
             elif self.game_state == "PLAY":
@@ -122,38 +131,41 @@ class Controller:
                     
                     if not clicked_toolbar:
                         if self.selected_power and self.hovered_tile:
-                            self.hovered_tile.element = self.selected_power
-                            if self.selected_power in ["lightning", "fire", "dark"]: self.audio.play('error')
-                            elif self.selected_power in ["light", "plant", "water"]: self.audio.play('found_city')
-                            else: self.audio.play('move')
+                            # Prevent trapping units in impassable terrain
+                            units_on_tile = [u for u in self.units if u.current_hex == hovered_hex]
+                            if self.founder and self.founder.current_hex == hovered_hex:
+                                units_on_tile.append(self.founder)
+                            
+                            if self.selected_power in ["stone", "metal"] and units_on_tile:
+                                self.audio.play('error')
+                            else:
+                                self.hovered_tile.element = self.selected_power
+                                if self.selected_power in ["lightning", "fire", "dark"]: self.audio.play('error')
+                                elif self.selected_power in ["light", "plant", "water"]: self.audio.play('found_city')
+                                else: self.audio.play('move')
                         else:
                             clicked_city = self.get_city_at_hex(hovered_hex)
                             if clicked_city:
                                 if clicked_city.owner_id == self.current_player:
                                     self.selected_city = True
-                                    self.instructions_text = f"Player {self.current_player + 1}: A to train army, S to train settler, F to build farm, I to build institute."
+                                    self.instructions_text = f"Player {self.current_player + 1}: A to train army, S to train settler, F to build farm, M to build mine, I to build institute."
                 if event.type == pygame.KEYDOWN:
                     if self.selected_city:
                         if event.key == pygame.K_a:
-                            self.audio.play('train')
-                            self.instructions_text = f"Player {self.current_player + 1} training unit..."
                             self.selected_city = False
-                            self.next_player()
-                        if event.key == pygame.K_s:
-                            self.audio.play('train')
-                            self.instructions_text = f"Player {self.current_player + 1} training settler..."
+                            self._execute_city_decision({"action": "train_army"})
+                        elif event.key == pygame.K_s:
                             self.selected_city = False
-                            self.next_player()
-                        if event.key == pygame.K_f:
-                            self.audio.play('build')
-                            self.instructions_text = f"Player {self.current_player + 1} building farm..."
+                            self._execute_city_decision({"action": "train_settler"})
+                        elif event.key == pygame.K_f:
                             self.selected_city = False
-                            self.next_player()
-                        if event.key == pygame.K_i:
-                            self.audio.play('build')
-                            self.instructions_text = f"Player {self.current_player + 1} building institute..."
+                            self._execute_city_decision({"action": "build_farm"})
+                        elif event.key == pygame.K_i:
                             self.selected_city = False
-                            self.next_player()
+                            self._execute_city_decision({"action": "build_institute"})
+                        elif event.key == pygame.K_m:
+                            self.selected_city = False
+                            self._execute_city_decision({"action": "build_mine"})
 
 
     def _fetch_ai_decision(self):
@@ -193,6 +205,98 @@ class Controller:
             self.ai_decision = decision
         self.ai_thinking = False
 
+    def _fetch_unit_ai_decision(self, unit):
+        print(f"Asking AI for Unit Player {self.current_player + 1}...")
+        decision = self.ai.get_unit_decision(unit, self.grid)
+        print(f"AI Unit decided: {decision}")
+        self.ai_decision = decision
+        self.ai_thinking = False
+
+    def _advance_turn_queue(self, last_action_msg=""):
+        if last_action_msg:
+            self.instructions_text = last_action_msg
+            
+        if self.turn_queue:
+            self.current_action_entity = self.turn_queue.pop(0)
+            self.turn_start_time = pygame.time.get_ticks()
+        else:
+            self.next_player(last_action_msg)
+
+    def _execute_city_decision(self, decision):
+        action = decision.get("action", "do_nothing")
+        stats = self.player_stats[self.current_player]
+        city = self.get_current_player_city()
+        msg = f"P{self.current_player + 1} city is idle."
+        
+        if not city:
+            self._advance_turn_queue(msg)
+            return
+            
+        if action == "train_army":
+            self.units.append(Character(city.current_hex, self.player_colors[self.current_player], unit_type="army", owner_id=self.current_player))
+            self.audio.play('train')
+            msg = f"P{self.current_player + 1} trained an army."
+        elif action == "train_settler":
+            self.units.append(Character(city.current_hex, self.player_colors[self.current_player], unit_type="settler", owner_id=self.current_player))
+            self.audio.play('train')
+            msg = f"P{self.current_player + 1} trained a settler."
+        elif action in ["build_farm", "build_institute", "build_mine"]:
+            dq_dr = [(1, 0), (0, 1), (-1, 1), (-1, 0), (0, -1), (1, -1)]
+            adj = [Hex(city.current_hex.q + dq, city.current_hex.r + dr) for dq, dr in dq_dr]
+            valid_tiles = [t for t in self.grid if t.position in adj + [city.current_hex] and not t.building]
+            
+            if action == "build_farm":
+                valid_tiles = [t for t in valid_tiles if t.element in ["plant", "creature", "water"]]
+            elif action == "build_mine":
+                valid_tiles = [t for t in valid_tiles if t.element != "ice"]
+            
+            if valid_tiles:
+                chosen = random.choice(valid_tiles)
+                chosen.building = action.split('_')[1]
+                chosen.building_owner = self.current_player
+                self.audio.play('build')
+                msg = f"P{self.current_player + 1} built a {chosen.building}."
+            else:
+                self.audio.play('error')
+                msg = f"P{self.current_player + 1} failed to build {action.split('_')[1]}."
+        elif action == "pray":
+            self.audio.play('found_city')
+            msg = f"P{self.current_player + 1} prays to the Ascended!"
+        elif action == "send_message":
+            m = decision.get("message", "We send our regards.")
+            if stats['wind'] > 0:
+                stats['wind'] -= 1
+                self.audio.play('move')
+                msg = f"P{self.current_player + 1}: '{m}'"
+        
+        self._advance_turn_queue(msg)
+
+    def _execute_unit_decision(self, unit, decision):
+        action = decision.get("action", "do_nothing")
+        msg = f"P{self.current_player + 1} unit is idle."
+        
+        if action == "move":
+            target = Hex(decision.get("q", unit.current_hex.q), decision.get("r", unit.current_hex.r))
+            tile = next((t for t in self.grid if t.position == target), None)
+            if tile and tile.element not in ["stone", "metal"]:
+                if unit.jump_to(target):
+                    self.audio.play('move')
+                    msg = f"P{self.current_player + 1} unit moved."
+                    unit.state = "idle"
+        elif action == "guard" and unit.unit_type == "army":
+            unit.state = "guarding"
+            self.audio.play('build')
+            msg = f"P{self.current_player + 1} army is guarding."
+        elif action == "settle" and unit.unit_type == "settler":
+            if not any(c.current_hex == unit.current_hex for c in self.cities):
+                self.cities.append(City(unit.current_hex, self.grid, unit.color, unit.owner_id))
+                if unit in self.units:
+                    self.units.remove(unit)
+                self.audio.play('found_city')
+                msg = f"P{self.current_player + 1} founded a new city."
+        
+        self._advance_turn_queue(msg)
+
     def update(self):
         if self.founder:
             self.founder.update()
@@ -202,50 +306,42 @@ class Controller:
         for city in self.cities:
             city.update()
             
+        for unit in self.units:
+            unit.update()
+            
         # AI Auto-Play for the main game loop
         if self.game_state == "PLAY":
             if not self.ai_thinking and self.ai_decision is None:
                 time_since_turn = pygame.time.get_ticks() - self.turn_start_time
                 if time_since_turn < 1500:
-                    self.instructions_text = f"Player {self.current_player + 1} is surveying their lands..."
+                    pass # Keep current text
                 elif time_since_turn < 3000:
-                    self.instructions_text = f"Player {self.current_player + 1} is consulting the village elders..."
+                    if self.current_action_entity == "CITY":
+                        self.instructions_text = f"Player {self.current_player + 1} is deciding what to produce..."
+                    else:
+                        self.instructions_text = f"Player {self.current_player + 1} unit is awaiting orders..."
                 else:
                     self.ai_thinking = True
-                    self.instructions_text = f"Player {self.current_player + 1} is deciding what to produce..."
-                    threading.Thread(target=self._fetch_play_ai_decision, daemon=True).start()
+                    if self.current_action_entity == "CITY":
+                        threading.Thread(target=self._fetch_play_ai_decision, daemon=True).start()
+                    else:
+                        threading.Thread(target=self._fetch_unit_ai_decision, args=(self.current_action_entity,), daemon=True).start()
                 
             if self.ai_decision is not None:
                 decision = self.ai_decision
                 self.ai_decision = None # Reset
                 
-                action = decision.get("action", "do_nothing")
-                stats = self.player_stats[self.current_player]
-                
-                if action in ["train_army", "train_settler"]:
-                    self.audio.play('train')
-                    self.next_player(f"P{self.current_player + 1} trained a unit.")
-                elif action in ["build_farm", "build_institute", "build_mine"]:
-                    self.audio.play('build')
-                    self.next_player(f"P{self.current_player + 1} built a {action.split('_')[1]}.")
-                elif action == "pray":
-                    self.audio.play('found_city')
-                    self.next_player(f"P{self.current_player + 1} prays to the Ascended!")
-                elif action == "send_message":
-                    msg = decision.get("message", "We send our regards.")
-                    if stats['wind'] > 0:
-                        stats['wind'] -= 1
-                        self.audio.play('move')
-                        self.next_player(f"P{self.current_player + 1}: '{msg}'")
-                    
+                if self.current_action_entity == "CITY":
+                    self._execute_city_decision(decision)
                 else:
-                    self.next_player(f"P{self.current_player + 1} is idle.")
+                    self._execute_unit_decision(self.current_action_entity, decision)
 
     def draw(self):
         self.toolbar_rects = self.view.draw_frame(
             self.grid, 
             self.cities, 
             self.founder, 
+            self.units,
             self.camera_x, 
             self.camera_y, 
             self.hovered_tile, 
@@ -275,7 +371,20 @@ class Controller:
 
     def next_player(self, last_action_msg=""):
         self.current_player = (self.current_player + 1) % self.num_players
+        
+        # Resource collection
+        stats = self.player_stats[self.current_player]
+        for t in self.grid:
+            if t.building_owner == self.current_player:
+                if t.building == "farm" and t.element in ["plant", "creature", "water"]:
+                    stats['resources'][t.element] += 2
+                elif t.building == "mine" and t.element != "ice":
+                    stats['resources'][t.element] += 1
+        
         self.turn_start_time = pygame.time.get_ticks()
+        self.turn_queue = ["CITY"] + [u for u in self.units if u.owner_id == self.current_player]
+        self.current_action_entity = self.turn_queue.pop(0) if self.turn_queue else "CITY"
+        
         base_msg = f"Player {self.current_player + 1}'s turn."
         if last_action_msg:
             self.instructions_text = f"{last_action_msg} {base_msg}"

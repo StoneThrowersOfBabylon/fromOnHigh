@@ -1,6 +1,6 @@
 import pygame
 import math
-from config import SCREEN_WIDTH, SCREEN_HEIGHT, HEX_SIZE, COLOR_BG, COLOR_SWORD, COLOR_SWORD_HILT, ELEMENT_COLORS
+from config import HEX_SIZE, COLOR_BG, COLOR_SWORD, COLOR_SWORD_HILT, ELEMENT_COLORS
 from hex import Hex
 
 class View:
@@ -41,22 +41,48 @@ class View:
             pygame.draw.line(self.screen, c, (px - d, py - d), (px + d, py + d), 2)
             pygame.draw.line(self.screen, c, (px + d, py - d), (px - d, py + d), 2)
 
+        if tile.building:
+            bx, by = int(cx), int(cy)
+            size = int(HEX_SIZE * 0.4)
+            rect = pygame.Rect(bx - size//2, by - size//2, size, size)
+            if tile.building == "farm":
+                pygame.draw.rect(self.screen, (34, 139, 34), rect) # Forest Green
+            elif tile.building == "mine":
+                pygame.draw.rect(self.screen, (105, 105, 105), rect) # Dim Gray
+            elif tile.building == "institute":
+                pygame.draw.rect(self.screen, (65, 105, 225), rect) # Royal Blue
+            pygame.draw.rect(self.screen, (0, 0, 0), rect, 2)
+
         pygame.draw.polygon(self.screen, (0, 0, 0), corners, outline_w)
 
     def draw_character(self, character, camera_x, camera_y):
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
         jump_offset = character.jump_height * 4 * character.progress * (1 - character.progress)
-        draw_x = int(character.pos[0] - camera_x + SCREEN_WIDTH // 2)
-        draw_y = int(character.pos[1] - jump_offset - camera_y + SCREEN_HEIGHT // 2)
+        draw_x = int(character.pos[0] - camera_x + screen_width // 2)
+        draw_y = int(character.pos[1] - jump_offset - camera_y + screen_height // 2)
 
-        pygame.draw.circle(self.screen, character.color, (draw_x, draw_y), int(HEX_SIZE * 0.7), 2)
-
-        pygame.draw.line(self.screen, COLOR_SWORD, (draw_x, draw_y - 15), (draw_x, draw_y + 5), 4)
-        pygame.draw.line(self.screen, COLOR_SWORD_HILT, (draw_x - 8, draw_y + 5), (draw_x + 8, draw_y + 5), 3)
-        pygame.draw.line(self.screen, COLOR_SWORD_HILT, (draw_x, draw_y + 5), (draw_x, draw_y + 12), 3)
+        if character.unit_type == "army":
+            points = [(draw_x, draw_y - 15), (draw_x - 12, draw_y + 10), (draw_x + 12, draw_y + 10)]
+            pygame.draw.polygon(self.screen, character.color, points)
+            pygame.draw.polygon(self.screen, (0, 0, 0), points, 2)
+            if character.state == "guarding":
+                pygame.draw.circle(self.screen, (200, 200, 200), (draw_x, draw_y), 20, 2)
+        elif character.unit_type == "settler":
+            points = [(draw_x - 12, draw_y - 10), (draw_x + 12, draw_y - 10), (draw_x, draw_y + 15)]
+            pygame.draw.polygon(self.screen, character.color, points)
+            pygame.draw.polygon(self.screen, (0, 0, 0), points, 2)
+        else:
+            pygame.draw.circle(self.screen, character.color, (draw_x, draw_y), int(HEX_SIZE * 0.7), 2)
+            pygame.draw.line(self.screen, COLOR_SWORD, (draw_x, draw_y - 15), (draw_x, draw_y + 5), 4)
+            pygame.draw.line(self.screen, COLOR_SWORD_HILT, (draw_x - 8, draw_y + 5), (draw_x + 8, draw_y + 5), 3)
+            pygame.draw.line(self.screen, COLOR_SWORD_HILT, (draw_x, draw_y + 5), (draw_x, draw_y + 12), 3)
 
     def draw_city(self, city, camera_x, camera_y):
-        draw_x = int(city.pos[0] - camera_x + SCREEN_WIDTH // 2)
-        draw_y = int(city.pos[1] - camera_y + SCREEN_HEIGHT // 2)
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+        draw_x = int(city.pos[0] - camera_x + screen_width // 2)
+        draw_y = int(city.pos[1] - camera_y + screen_height // 2)
 
         border_hexes = [
             city.current_hex,
@@ -71,8 +97,8 @@ class View:
         edges = {}
         for bh in border_hexes:
             world_center = bh.to_pixel()
-            screen_center = (world_center[0] - camera_x + SCREEN_WIDTH // 2, 
-                             world_center[1] - camera_y + SCREEN_HEIGHT // 2)
+            screen_center = (world_center[0] - camera_x + screen_width // 2, 
+                             world_center[1] - camera_y + screen_height // 2)
             corners = self.get_hex_corners(screen_center)
             for i in range(6):
                 p1 = corners[i]
@@ -107,11 +133,13 @@ class View:
         self.screen.blit(instructions, text_rect)
 
     def draw_toolbar(self, powers, selected_power):
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
         rects = []
         spacing = 50
         box_size = 36
-        start_x = SCREEN_WIDTH // 2 - (len(powers) * spacing) // 2
-        start_y = SCREEN_HEIGHT - 60
+        start_x = screen_width // 2 - (len(powers) * spacing) // 2
+        start_y = screen_height - 60
         
         # Toolbar background
         bg_rect = pygame.Rect(start_x - 10, start_y - 10, len(powers) * spacing + 10, 60)
@@ -133,16 +161,18 @@ class View:
             rects.append(rect)
         return rects
 
-    def draw_frame(self, grid, cities, founder, camera_x, camera_y, hovered_tile, instructions_text, game_state="SETUP", god_powers=None, selected_power=None):
+    def draw_frame(self, grid, cities, founder, units, camera_x, camera_y, hovered_tile, instructions_text, game_state="SETUP", god_powers=None, selected_power=None):
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
         self.screen.fill(COLOR_BG)
         
         for tile in grid:
             world_center = tile.position.to_pixel()
             
-            screen_x = world_center[0] - camera_x + SCREEN_WIDTH // 2
-            screen_y = world_center[1] - camera_y + SCREEN_HEIGHT // 2
-            if (screen_x + HEX_SIZE < 0 or screen_x - HEX_SIZE > SCREEN_WIDTH or
-                screen_y + HEX_SIZE < 0 or screen_y - HEX_SIZE > SCREEN_HEIGHT):
+            screen_x = world_center[0] - camera_x + screen_width // 2
+            screen_y = world_center[1] - camera_y + screen_height // 2
+            if (screen_x + HEX_SIZE < 0 or screen_x - HEX_SIZE > screen_width or
+                screen_y + HEX_SIZE < 0 or screen_y - HEX_SIZE > screen_height):
                 continue
 
             corners = self.get_hex_corners((screen_x, screen_y))
@@ -154,6 +184,8 @@ class View:
 
         for city in cities:
             self.draw_city(city, camera_x, camera_y)
+        for unit in units:
+            self.draw_character(unit, camera_x, camera_y)
         if founder:
             self.draw_character(founder, camera_x, camera_y)
         

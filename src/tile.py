@@ -9,11 +9,14 @@ class Tile:
         self.gold = random.randint(0, 3)
         self.has_city = False
         self.owner = None
+        self.building = None
+        self.building_owner = None
         self.deco_seed = random.randint(0, 2**31 - 1)
 
     def __str__(self):
         return (
             f"Tile(hex=({self.position.q}, {self.position.r}), "
             f"element={self.element!r}, food={self.food}, gold={self.gold}, "
-            f"has_city={self.has_city}, owner={self.owner!r})"
+            f"has_city={self.has_city}, owner={self.owner!r}, "
+            f"building={self.building!r}, building_owner={self.building_owner})"
         )
