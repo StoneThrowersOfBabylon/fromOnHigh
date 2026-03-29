@@ -37,20 +37,26 @@ class AIPlayer:
             print(f"AI Connection Error: {e}")
         return {} # Return empty dict if something fails so the game can retry
 
-    def get_unit_decision(self, unit, grid):
+    def get_unit_decision(self, state):
         prompt = f"""
-        You are a {unit.unit_type} unit in a hex-grid game. 
-        You are currently at coordinates q: {unit.current_hex.q}, r: {unit.current_hex.r}.
+        You are a {state['unit_type']} unit in a hex-grid game. 
+        You are currently at coordinates q: {state['q']}, r: {state['r']}.
+        
+        Surroundings:
+        {state['surroundings']}
+        
+        Directions to other cities:
+        {state['other_cities']}
         """
         
-        if unit.unit_type == "army":
+        if state['unit_type'] == "army":
             prompt += f"""
         Choose ONE action:
         - "move": travel to an adjacent hex.
         - "guard": stay in place and defend the area.
         
         Respond ONLY with a valid JSON object. Do not include any other text.
-        To move: {{"action": "move", "q": {unit.current_hex.q + 1}, "r": {unit.current_hex.r}}}
+        To move: {{"action": "move", "q": {state['q'] + 1}, "r": {state['r']}}}
         To guard: {{"action": "guard"}}
             """
         else: # settler
@@ -60,7 +66,7 @@ class AIPlayer:
         - "settle": found a new city at your current location.
         
         Respond ONLY with a valid JSON object. Do not include any other text.
-        To move: {{"action": "move", "q": {unit.current_hex.q + 1}, "r": {unit.current_hex.r}}}
+        To move: {{"action": "move", "q": {state['q'] + 1}, "r": {state['r']}}}
         To settle: {{"action": "settle"}}
             """
             

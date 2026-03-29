@@ -207,7 +207,44 @@ class Controller:
 
     def _fetch_unit_ai_decision(self, unit):
         print(f"Asking AI for Unit Player {self.current_player + 1}...")
-        decision = self.ai.get_unit_decision(unit, self.grid)
+        
+        adj_info = []
+        dq_dr = [(1, 0), (0, 1), (-1, 1), (-1, 0), (0, -1), (1, -1)]
+        for dq, dr in dq_dr:
+            hx = Hex(unit.current_hex.q + dq, unit.current_hex.r + dr)
+            tile_element = "void"
+            for t in self.grid:
+                if t.position == hx:
+                    tile_element = t.element
+                    break
+            
+            occupant = "none"
+            for u in self.units:
+                if u.current_hex == hx:
+                    occupant = f"Player {u.owner_id + 1} {u.unit_type}"
+                    break
+            for c in self.cities:
+                if c.current_hex == hx:
+                    occupant = f"Player {c.owner_id + 1} city"
+                    break
+            adj_info.append(f"Direction (dq:{dq}, dr:{dr}): Tile: {tile_element}, Occupant: {occupant}")
+            
+        other_cities_info = []
+        for c in self.cities:
+            if c.owner_id != unit.owner_id:
+                dq = c.current_hex.q - unit.current_hex.q
+                dr = c.current_hex.r - unit.current_hex.r
+                other_cities_info.append(f"Player {c.owner_id + 1} city at relative q:{dq}, r:{dr}")
+                
+        state = {
+            'q': unit.current_hex.q,
+            'r': unit.current_hex.r,
+            'unit_type': unit.unit_type,
+            'surroundings': "\n        ".join(adj_info),
+            'other_cities': "\n        ".join(other_cities_info) if other_cities_info else "None known"
+        }
+        
+        decision = self.ai.get_unit_decision(state)
         print(f"AI Unit decided: {decision}")
         self.ai_decision = decision
         self.ai_thinking = False
