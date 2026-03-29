@@ -41,6 +41,18 @@ class View:
             pygame.draw.line(self.screen, c, (px - d, py - d), (px + d, py + d), 2)
             pygame.draw.line(self.screen, c, (px + d, py - d), (px - d, py + d), 2)
 
+        if tile.building:
+            bx, by = int(cx), int(cy)
+            size = int(HEX_SIZE * 0.4)
+            rect = pygame.Rect(bx - size//2, by - size//2, size, size)
+            if tile.building == "farm":
+                pygame.draw.rect(self.screen, (34, 139, 34), rect) # Forest Green
+            elif tile.building == "mine":
+                pygame.draw.rect(self.screen, (105, 105, 105), rect) # Dim Gray
+            elif tile.building == "institute":
+                pygame.draw.rect(self.screen, (65, 105, 225), rect) # Royal Blue
+            pygame.draw.rect(self.screen, (0, 0, 0), rect, 2)
+
         pygame.draw.polygon(self.screen, (0, 0, 0), corners, outline_w)
 
     def draw_character(self, character, camera_x, camera_y):
@@ -48,11 +60,21 @@ class View:
         draw_x = int(character.pos[0] - camera_x + SCREEN_WIDTH // 2)
         draw_y = int(character.pos[1] - jump_offset - camera_y + SCREEN_HEIGHT // 2)
 
-        pygame.draw.circle(self.screen, character.color, (draw_x, draw_y), int(HEX_SIZE * 0.7), 2)
-
-        pygame.draw.line(self.screen, COLOR_SWORD, (draw_x, draw_y - 15), (draw_x, draw_y + 5), 4)
-        pygame.draw.line(self.screen, COLOR_SWORD_HILT, (draw_x - 8, draw_y + 5), (draw_x + 8, draw_y + 5), 3)
-        pygame.draw.line(self.screen, COLOR_SWORD_HILT, (draw_x, draw_y + 5), (draw_x, draw_y + 12), 3)
+        if character.unit_type == "army":
+            points = [(draw_x, draw_y - 15), (draw_x - 12, draw_y + 10), (draw_x + 12, draw_y + 10)]
+            pygame.draw.polygon(self.screen, character.color, points)
+            pygame.draw.polygon(self.screen, (0, 0, 0), points, 2)
+            if character.state == "guarding":
+                pygame.draw.circle(self.screen, (200, 200, 200), (draw_x, draw_y), 20, 2)
+        elif character.unit_type == "settler":
+            points = [(draw_x - 12, draw_y - 10), (draw_x + 12, draw_y - 10), (draw_x, draw_y + 15)]
+            pygame.draw.polygon(self.screen, character.color, points)
+            pygame.draw.polygon(self.screen, (0, 0, 0), points, 2)
+        else:
+            pygame.draw.circle(self.screen, character.color, (draw_x, draw_y), int(HEX_SIZE * 0.7), 2)
+            pygame.draw.line(self.screen, COLOR_SWORD, (draw_x, draw_y - 15), (draw_x, draw_y + 5), 4)
+            pygame.draw.line(self.screen, COLOR_SWORD_HILT, (draw_x - 8, draw_y + 5), (draw_x + 8, draw_y + 5), 3)
+            pygame.draw.line(self.screen, COLOR_SWORD_HILT, (draw_x, draw_y + 5), (draw_x, draw_y + 12), 3)
 
     def draw_city(self, city, camera_x, camera_y):
         draw_x = int(city.pos[0] - camera_x + SCREEN_WIDTH // 2)
@@ -133,7 +155,7 @@ class View:
             rects.append(rect)
         return rects
 
-    def draw_frame(self, grid, cities, founder, camera_x, camera_y, hovered_tile, instructions_text, game_state="SETUP", god_powers=None, selected_power=None):
+    def draw_frame(self, grid, cities, founder, units, camera_x, camera_y, hovered_tile, instructions_text, game_state="SETUP", god_powers=None, selected_power=None):
         self.screen.fill(COLOR_BG)
         
         for tile in grid:
@@ -154,6 +176,8 @@ class View:
 
         for city in cities:
             self.draw_city(city, camera_x, camera_y)
+        for unit in units:
+            self.draw_character(unit, camera_x, camera_y)
         if founder:
             self.draw_character(founder, camera_x, camera_y)
         
