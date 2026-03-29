@@ -32,8 +32,6 @@ Return ONLY JSON. Ex: {{"action": "move", "q": {current_hex.q+1}, "r": {current_
         prompt = f"""
 {state['unit_type']} unit at q:{state['q']}, r:{state['r']}.
 Surroundings: {state['surroundings']}
-Other cities: {state['other_cities']}
-Return ONLY JSON."""
 Other cities: {state['other_cities']}"""
 
         if state.get('god_whisper'):
@@ -70,8 +68,6 @@ Actions:
 - "build_institute"
 - "pray"
 - "send_message" (add "message" field)
-Only choose an action if you have the required resources.
-Return ONLY JSON. Ex: {{"action": "train_army"}}"""
 Only choose an action if you have the required resources."""
 
         if state.get('god_whisper'):

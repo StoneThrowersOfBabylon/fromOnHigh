@@ -57,7 +57,6 @@ class Controller:
         self.turn_start_time = 0
         self.god_powers = list(ELEMENTS)
         self.selected_power = None
-        self.toolbar_rects = []
         self.ui_rects = {}
         
         self.toolbar_collapsed = False
@@ -137,14 +136,6 @@ class Controller:
                         continue
 
                     clicked_toolbar = False
-                    for i, rect in enumerate(self.toolbar_rects):
-                        if rect.collidepoint(event.pos):
-                            if self.selected_power == self.god_powers[i]:
-                                self.selected_power = None
-                            else:
-                                self.selected_power = self.god_powers[i]
-                            clicked_toolbar = True
-                            break
                     if not self.toolbar_collapsed:
                         for i, rect in enumerate(self.ui_rects.get('toolbar', [])):
                             if rect.collidepoint(event.pos):
@@ -178,7 +169,6 @@ class Controller:
                             else:
                                 self.selected_city = None
                 if event.type == pygame.KEYDOWN:
-                    if self.selected_city and self.selected_city.owner_id == self.current_player:
                     if self.text_expanded:
                         if event.key == pygame.K_RETURN:
                             self.god_whisper = self.current_text
@@ -512,7 +502,6 @@ class Controller:
                     self._execute_unit_decision(self.current_action_entity, decision)
 
     def draw(self):
-        self.toolbar_rects = self.view.draw_frame(
         self.ui_rects = self.view.draw_frame(
             self.grid, 
             self.cities, 
@@ -526,7 +515,6 @@ class Controller:
             self.god_powers,
             self.selected_power,
             self.selected_city,
-            self.player_stats
             self.player_stats,
             self.toolbar_collapsed,
             self.text_expanded,
