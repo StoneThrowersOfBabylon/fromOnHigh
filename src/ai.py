@@ -36,3 +36,29 @@ class AIPlayer:
         except Exception as e:
             print(f"AI Connection Error: {e}")
         return {} # Return empty dict if something fails so the game can retry
+
+    def get_city_decision(self, q, r):
+        prompt = f"""
+        You are an AI tribe leader. Your city is at coordinates q: {q}, r: {r}.
+        Choose one action to produce this turn to help your civilization survive.
+        
+        Options: "train_army", "train_settler", "build_farm", "build_institute".
+        
+        Respond ONLY with a valid JSON object. Do not include any other text.
+        Example: {{"action": "build_farm"}}
+        """
+        
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json"
+        }
+        
+        try:
+            response = requests.post(self.url, json=payload, timeout=15)
+            if response.status_code == 200:
+                return json.loads(response.json()['response'])
+        except Exception as e:
+            print(f"AI Connection Error: {e}")
+        return {}
