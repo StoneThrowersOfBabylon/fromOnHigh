@@ -41,7 +41,36 @@ class View:
             pygame.draw.line(self.screen, c, (px - d, py - d), (px + d, py + d), 2)
             pygame.draw.line(self.screen, c, (px + d, py - d), (px - d, py + d), 2)
 
+        self.draw_building_icon(tile, (cx, cy))
         pygame.draw.polygon(self.screen, (0, 0, 0), corners, outline_w)
+
+    def draw_building_icon(self, tile, center):
+        if not tile.building:
+            return
+
+        cx, cy = int(center[0]), int(center[1])
+        ready = tile.building_turns_left <= 0
+
+        if tile.building == "farm":
+            self.draw_farm_icon(cx, cy, ready)
+        elif tile.building == "institute":
+            self.draw_institute_icon(cx, cy, ready)
+
+        if not ready:
+            countdown = self.font.render(str(tile.building_turns_left), True, (255, 255, 255))
+            self.screen.blit(countdown, (cx - countdown.get_width() // 2, cy - 24))
+
+    def draw_farm_icon(self, cx, cy, ready):
+        color = (100, 200, 100) if ready else (180, 180, 120)
+        pygame.draw.circle(self.screen, color, (cx, cy), 8)
+        pygame.draw.line(self.screen, (80, 140, 60), (cx - 4, cy + 2), (cx + 4, cy + 2), 2)
+        pygame.draw.line(self.screen, (80, 140, 60), (cx, cy - 6), (cx, cy + 4), 2)
+
+    def draw_institute_icon(self, cx, cy, ready):
+        color = (110, 170, 230) if ready else (160, 160, 200)
+        pygame.draw.rect(self.screen, color, (cx - 7, cy - 8, 14, 14))
+        pygame.draw.line(self.screen, (220, 220, 220), (cx - 7, cy), (cx + 7, cy), 2)
+        pygame.draw.line(self.screen, (220, 220, 220), (cx, cy - 8), (cx, cy + 6), 2)
 
     def draw_character(self, character, camera_x, camera_y):
         jump_offset = character.jump_height * 4 * character.progress * (1 - character.progress)

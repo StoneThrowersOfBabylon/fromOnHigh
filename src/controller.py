@@ -34,7 +34,7 @@ class Controller:
             (50, 255, 255)
         ]
 
-        self.selected_city = False
+        self.selected_city = None
         self.current_player = 0
         self.founder = Character(get_random_passable_hex(self.grid), self.player_colors[self.current_player])
         self.instructions_text = f"Player {self.current_player + 1}'s turn. Click to move, Enter to found City."
@@ -90,28 +90,35 @@ class Controller:
                         self.instructions_text = f"Hovering {self.hovered_tile.element} tile at ({hovered_hex.q}, {hovered_hex.r})"
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     clicked_city = self.get_city_at_hex(hovered_hex)
-                    if clicked_city:
-                        if clicked_city.owner_id == self.current_player:
-                            self.selected_city = True
-                            self.instructions_text = f"Player {self.current_player + 1}: A to train army, S to train settler, F to build farm, I to build institute."
+                    if clicked_city and clicked_city.owner_id == self.current_player:
+                        self.selected_city = clicked_city
+                        self.instructions_text = f"Player {self.current_player + 1}: A to train army, S to train settler, F to build farm, I to build institute."
                 if event.type == pygame.KEYDOWN:
                     if self.selected_city:
                         if event.key == pygame.K_a:
                             self.instructions_text = f"Player {self.current_player + 1} training unit..."
-                            self.selected_city = False
+                            self.selected_city = None
                             self.next_player()
-                        if event.key == pygame.K_s:
+                        elif event.key == pygame.K_s:
                             self.instructions_text = f"Player {self.current_player + 1} training settler..."
-                            self.selected_city = False
+                            self.selected_city = None
                             self.next_player()
-                        if event.key == pygame.K_f:
-                            self.instructions_text = f"Player {self.current_player + 1} building farm..."
-                            self.selected_city = False
-                            self.next_player()
-                        if event.key == pygame.K_i:
-                            self.instructions_text = f"Player {self.current_player + 1} building institute..."
-                            self.selected_city = False
-                            self.next_player()
+                        elif event.key == pygame.K_f:
+                            if not self.selected_city.add_farm():
+                                self.instructions_text = f"Player {self.current_player + 1} has no available space for a farm!"
+                            else:
+                                self.instructions_text = f"Player {self.current_player + 1} building farm..."
+                                self.selected_city = None
+                                self.next_player()
+                        elif event.key == pygame.K_i:
+                            if not self.selected_city.add_institute():
+                                self.instructions_text = f"Player {self.current_player + 1} has no available space for an institute!"
+                            else:
+                                self.instructions_text = f"Player {self.current_player + 1} building institute..."
+                                self.selected_city = None
+                                self.next_player()
+                        elif event.key == pygame.K_ESCAPE:
+                            self.selected_city = None
 
 
     def _fetch_ai_decision(self):
@@ -159,8 +166,16 @@ class Controller:
         if city:
             self.camera_x, self.camera_y = city.pos
 
+    def advance_building_construction(self):
+        for tile in self.grid:
+            if tile.building and tile.building_turns_left > 0:
+                tile.building_turns_left -= 1
+
     def next_player(self):
+        previous_player = self.current_player
         self.current_player = (self.current_player + 1) % self.num_players
+        if self.current_player == 0 and previous_player == self.num_players - 1:
+            self.advance_building_construction()
         self.instructions_text = f"Player {self.current_player + 1}'s turn."
         self.center_camera_on_current_player_city()
 

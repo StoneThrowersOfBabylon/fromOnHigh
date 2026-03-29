@@ -9,6 +9,9 @@ class Tile:
         self.gold = random.randint(0, 3)
         self.has_city = False
         self.owner = None
+        self.building = None
+        self.building_owner = None
+        self.building_turns_left = 0
         self.deco_seed = random.randint(0, 2**31 - 1)
 
     def __str__(self):
