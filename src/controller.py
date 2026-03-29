@@ -79,26 +79,23 @@ class Controller:
                     if self.hovered_tile:
                         self.instructions_text = f"Hovering {self.hovered_tile.element} tile at ({hovered_hex.q}, {hovered_hex.r})"
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if self.hovered_tile:
-                        self.instructions_text = f"Player {self.current_player + 1} clicked tile..."
-                        self.next_player()
-            # elif event.type == pygame.MOUSEBUTTONDOWN:
-            #     if self.game_state == "SETUP" and self.founder:
-            #         if self.hovered_tile and self.hovered_tile.element not in ["stone", "metal"]:
-            #             self.founder.jump_to(hovered_hex)
-            # elif event.type == pygame.KEYDOWN:
-            #     if event.key == pygame.K_RETURN:
-            #         if self.game_state == "SETUP" and self.founder:
-            #             if not any(city.current_hex == self.founder.current_hex for city in self.cities):
-            #                 self.cities.append(City(self.founder.current_hex, self.grid, self.player_colors[self.current_player]))
-            #                 self.current_player += 1
-            #                 if self.current_player < self.num_players:
-            #                     self.founder = Character(get_random_passable_hex(self.grid), self.player_colors[self.current_player])
-            #                     self.instructions_text = f"Player {self.current_player + 1}'s turn. Click to move, Enter to found City."
-            #                 else:
-            #                     self.founder = None
-            #                     self.game_state = "PLAY"
-            #                     self.instructions_text = "All cities founded! Main game phase."
+                    clicked_city = self.get_city_at_hex(hovered_hex)
+                    if clicked_city:
+                        if clicked_city.owner_id == self.current_player:
+                            self.instructions_text = f"Player {self.current_player + 1}: A to train army, S to train settler, F to build farm, I to build institute."
+                            if event.type == pygame.K_a:
+                                self.instructions_text = f"Player {self.current_player + 1} traing unit..."
+                                self.next_player()
+                            if event.type == pygame.K_s:
+                                self.instructions_text = f"Player {self.current_player + 1} training settler..."
+                                self.next_player()
+                            if event.type == pygame.K_f:
+                                self.instructions_text = f"Player {self.current_player + 1} building farm..."
+                                self.next_player()
+                            if event.type == pygame.K_i:
+                                self.instructions_text = f"Player {self.current_player + 1} building institute..."
+                                self.next_player()
+
 
     def update(self):
         if self.founder:
@@ -124,6 +121,9 @@ class Controller:
 
     def get_current_player_cities(self):
         return self.get_player_cities(self.current_player)
+
+    def get_city_at_hex(self, hex_coord):
+        return next((city for city in self.cities if city.current_hex == hex_coord), None)
 
     def get_current_player_city(self):
         cities = self.get_current_player_cities()
