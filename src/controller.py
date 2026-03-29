@@ -1,4 +1,5 @@
 import pygame
+import threading
 from config import FPS
 from hex import Hex
 from tile import Tile
@@ -6,6 +7,7 @@ from character import Character
 from city import City
 from utils import get_random_passable_hex
 from audio import AudioManager
+from ai import AIPlayer
 
 class Controller:
     def __init__(self, view):
@@ -37,6 +39,10 @@ class Controller:
         self.camera_x, self.camera_y = 0.0, 0.0
         self.hovered_tile = None
         self.audio = AudioManager()
+        
+        self.ai = AIPlayer()
+        self.ai_thinking = False
+        self.ai_decision = None
 
     def handle_events(self):
         mouse_pos = pygame.mouse.get_pos()
@@ -71,11 +77,19 @@ class Controller:
                                 self.game_state = "PLAY"
                                 self.instructions_text = "All cities founded! Main game phase."
 
+    def _fetch_ai_decision(self):
+        print(f"Asking AI for Player {self.current_player + 1}...")
+        decision = self.ai.get_decision(self.founder.current_hex, self.grid)
+        print(f"AI decided: {decision}")
+        self.ai_decision = decision
+        self.ai_thinking = False
+
     def update(self):
         if self.founder:
             self.founder.update()
             self.camera_x = self.founder.pos[0]
             self.camera_y = self.founder.pos[1]
+            
         for city in self.cities:
             city.update()
 
