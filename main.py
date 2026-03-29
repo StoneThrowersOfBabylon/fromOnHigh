@@ -341,9 +341,6 @@ class Character:
         dq = self.current_hex.q - target_hex.q
         dr = self.current_hex.r - target_hex.r
         return (dq, dr) in [(1, 0), (0, 1), (-1, 1), (-1, 0), (0, -1), (1, -1)]
-        self.start_pos = list(self.pos)
-        self.target_hex = target_hex
-        self.progress = 0.0
 
     def update(self):
         if self.progress < 1.0:
@@ -373,6 +370,61 @@ class Character:
         # Handle
         pygame.draw.line(surface, COLOR_SWORD_HILT, (draw_x, draw_y + 5), (draw_x, draw_y + 12), 3)
 
+class City:
+    def __init__(self, start_hex, grid):
+        self.current_hex = start_hex
+        self.pos = list(start_hex.to_pixel())
+        
+        # Turn the tile it is on into a white color (light element)
+        for tile in grid:
+            if tile.position == self.current_hex:
+                tile.element = "light"
+                tile.has_city = True
+                break
+
+    def update(self):
+        pass
+
+    def draw(self, surface):
+        draw_x = int(self.pos[0])
+        draw_y = int(self.pos[1])
+
+        # Border of radius 1 hex
+        border_hexes = [
+            self.current_hex,
+            Hex(self.current_hex.q + 1, self.current_hex.r),
+            Hex(self.current_hex.q + 1, self.current_hex.r - 1),
+            Hex(self.current_hex.q, self.current_hex.r - 1),
+            Hex(self.current_hex.q - 1, self.current_hex.r),
+            Hex(self.current_hex.q - 1, self.current_hex.r + 1),
+            Hex(self.current_hex.q, self.current_hex.r + 1),
+        ]
+        
+        edges = {}
+        for bh in border_hexes:
+            center = bh.to_pixel()
+            corners = get_hex_corners(center)
+            for i in range(6):
+                p1 = corners[i]
+                p2 = corners[(i + 1) % 6]
+                rp1 = (int(round(p1[0])), int(round(p1[1])))
+                rp2 = (int(round(p2[0])), int(round(p2[1])))
+                edge = tuple(sorted((rp1, rp2)))
+                edges[edge] = edges.get(edge, 0) + 1
+        
+        for edge, count in edges.items():
+            if count == 1:
+                pygame.draw.line(surface, (255, 255, 255), edge[0], edge[1], 4)
+
+        # Draw house icon
+        pygame.draw.rect(surface, (200, 200, 200), (draw_x - 12, draw_y - 2, 24, 16))
+        pygame.draw.rect(surface, (139, 69, 19), (draw_x - 4, draw_y + 6, 8, 8))
+        pygame.draw.polygon(surface, (150, 50, 50), [
+            (draw_x - 16, draw_y - 2), 
+            (draw_x + 16, draw_y - 2), 
+            (draw_x, draw_y - 18)
+        ])
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -388,24 +440,45 @@ def main():
         for r in range(r1, r2 + 1):
             grid.append(Tile(Hex(q, r)))
 
-    player = Character(Hex(0, 0))
+    game_state = "SETUP"
+    founder = Character(Hex(0, 0))
+    cities = []
+
     font = pygame.font.SysFont(None, 24)
-    instructions = font.render("Click on a tile to jump!", True, (200, 200, 200))
+    instructions = font.render("Click a passable tile to jump! Press Enter to found the first City.", True, (200, 200, 200))
     
     running = True
     while running:
         mouse_pos = pygame.mouse.get_pos()
         hovered_hex = Hex.from_pixel(mouse_pos[0], mouse_pos[1])
+        
+        hovered_tile = None
+        for t in grid:
+            if t.position == hovered_hex:
+                hovered_tile = t
+                break
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if any(t.position == hovered_hex for t in grid):
-                    player.jump_to(hovered_hex)
+                if game_state == "SETUP" and founder:
+                    # Check that the target tile exists and isn't impassable
+                    if hovered_tile and hovered_tile.element not in ["stone", "metal"]:
+                        founder.jump_to(hovered_hex)
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    if game_state == "SETUP" and founder:
+                        cities.append(City(founder.current_hex, grid))
+                        founder = None
+                        game_state = "PLAY"
+                        instructions = font.render("City founded! Main game phase.", True, (200, 200, 200))
 
         # Update
-        player.update()
+        if founder:
+            founder.update()
+        for city in cities:
+            city.update()
 
         # Draw
         screen.fill(COLOR_BG)
@@ -414,14 +487,17 @@ def main():
         for tile in grid:
             center = tile.position.to_pixel()
             corners = get_hex_corners(center)
-            if tile.position == hovered_hex:
+            if tile == hovered_tile:
                 color = element_hover_color(tile.element)
             else:
                 color = ELEMENT_COLORS[tile.element]
             draw_tile_hex(screen, tile, center, corners, color)
 
-        # Draw player
-        player.draw(screen)
+        # Draw entities
+        for city in cities:
+            city.draw(screen)
+        if founder:
+            founder.draw(screen)
         
         # Draw instructions
         screen.blit(instructions, (10, 10))
