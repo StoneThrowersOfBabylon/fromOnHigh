@@ -34,7 +34,13 @@ Return ONLY JSON. Ex: {{"action": "move", "q": {current_hex.q+1}, "r": {current_
 Surroundings: {state['surroundings']}
 Other cities: {state['other_cities']}
 Return ONLY JSON."""
+Other cities: {state['other_cities']}"""
+
+        if state.get('god_whisper'):
+            prompt += f"\n\nThe Gods command you (prioritize this): {state['god_whisper']}"
         
+        prompt += "\nReturn ONLY JSON."
+
         if state['unit_type'] == "army":
             prompt += """\nActions: "move" (adj hex) or "guard". Ex: {"action": "move", "q": 1, "r": 0} or {"action": "guard"}"""
         else:
@@ -66,6 +72,12 @@ Actions:
 - "send_message" (add "message" field)
 Only choose an action if you have the required resources.
 Return ONLY JSON. Ex: {{"action": "train_army"}}"""
+Only choose an action if you have the required resources."""
+
+        if state.get('god_whisper'):
+            prompt += f"\n\nThe Gods command you (prioritize this): {state['god_whisper']}"
+
+        prompt += """\nReturn ONLY JSON. Ex: {"action": "train_army"}"""
         
         payload = {
             "model": self.model,

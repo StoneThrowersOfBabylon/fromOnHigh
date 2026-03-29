@@ -58,6 +58,13 @@ class Controller:
         self.god_powers = list(ELEMENTS)
         self.selected_power = None
         self.toolbar_rects = []
+        self.ui_rects = {}
+        
+        self.toolbar_collapsed = False
+        self.text_expanded = False
+        self.current_text = ""
+        self.god_whisper = ""
+        self.whisper_target_player = None
         
         # Set up distinct AI personalities and starting resources
         personalities = [
@@ -121,6 +128,14 @@ class Controller:
                     if self.hovered_tile:
                         self.instructions_text = f"Hovering {self.hovered_tile.element} tile at ({hovered_hex.q}, {hovered_hex.r})"
                 if event.type == pygame.MOUSEBUTTONDOWN:
+                    if self.ui_rects.get('left_btn') and self.ui_rects['left_btn'].collidepoint(event.pos):
+                        self.toolbar_collapsed = not self.toolbar_collapsed
+                        continue
+                        
+                    if self.ui_rects.get('right_btn') and self.ui_rects['right_btn'].collidepoint(event.pos):
+                        self.text_expanded = not self.text_expanded
+                        continue
+
                     clicked_toolbar = False
                     for i, rect in enumerate(self.toolbar_rects):
                         if rect.collidepoint(event.pos):
@@ -130,6 +145,15 @@ class Controller:
                                 self.selected_power = self.god_powers[i]
                             clicked_toolbar = True
                             break
+                    if not self.toolbar_collapsed:
+                        for i, rect in enumerate(self.ui_rects.get('toolbar', [])):
+                            if rect.collidepoint(event.pos):
+                                if self.selected_power == self.god_powers[i]:
+                                    self.selected_power = None
+                                else:
+                                    self.selected_power = self.god_powers[i]
+                                clicked_toolbar = True
+                                break
                     
                     if not clicked_toolbar:
                         if self.selected_power and self.hovered_tile:
@@ -155,6 +179,17 @@ class Controller:
                                 self.selected_city = None
                 if event.type == pygame.KEYDOWN:
                     if self.selected_city and self.selected_city.owner_id == self.current_player:
+                    if self.text_expanded:
+                        if event.key == pygame.K_RETURN:
+                            self.god_whisper = self.current_text
+                            self.whisper_target_player = None
+                            self.current_text = ""
+                            self.text_expanded = False
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.current_text = self.current_text[:-1]
+                        else:
+                            self.current_text += event.unicode
+                    elif self.selected_city and self.selected_city.owner_id == self.current_player:
                         if event.key == pygame.K_a:
                             self.selected_city = None
                             self._execute_city_decision({"action": "train_army"})
@@ -202,6 +237,12 @@ class Controller:
                 'surroundings': ", ".join(adj_elements) if adj_elements else "Empty void"
             }
             
+            if self.god_whisper:
+                if self.whisper_target_player is None:
+                    self.whisper_target_player = self.current_player
+                if self.whisper_target_player == self.current_player:
+                    state['god_whisper'] = self.god_whisper
+            
             print(f"Asking AI for Player {self.current_player + 1}...")
             decision = self.ai.get_city_decision(state)
             print(f"AI decided: {decision}")
@@ -238,6 +279,12 @@ class Controller:
             'other_cities': "\n        ".join(other_cities_info) if other_cities_info else "None known"
         }
         
+        if self.god_whisper:
+            if self.whisper_target_player is None:
+                self.whisper_target_player = self.current_player
+            if self.whisper_target_player == self.current_player:
+                state['god_whisper'] = self.god_whisper
+        
         decision = self.ai.get_unit_decision(state)
         print(f"AI Unit decided: {decision}")
         self.ai_decision = decision
@@ -267,7 +314,8 @@ class Controller:
             if stats['resources']['creature'] >= 1 and stats['resources']['stone'] >= 1:
                 stats['resources']['creature'] -= 1
                 stats['resources']['stone'] -= 1
-                self.units.append(Character(city.current_hex, self.player_colors[self.current_player], unit_type="army", owner_id=self.current_player))
+                creation_level = stats['research']
+                self.units.append(Character(city.current_hex, self.player_colors[self.current_player], unit_type="army", owner_id=self.current_player, creation_research_level=creation_level))
                 self.audio.play('train')
                 msg = f"P{self.current_player + 1} trained an army."
             else:
@@ -347,8 +395,16 @@ class Controller:
             if tile and tile.element not in ["stone", "metal"]:
                 if unit.jump_to(target):
                     self.audio.play('move')
-                    msg = f"P{self.current_player + 1} unit moved."
                     unit.state = "idle"
+                    
+                    combat_msg = None
+                    if unit.unit_type == 'army':
+                        combat_msg = self._check_for_combat(unit)
+                    
+                    if combat_msg:
+                        msg = combat_msg
+                    else:
+                        msg = f"P{self.current_player + 1} unit moved."
         elif action == "guard" and unit.unit_type == "army":
             unit.state = "guarding"
             self.audio.play('build')
@@ -365,6 +421,56 @@ class Controller:
                 msg = f"P{self.current_player + 1} founded a new city."
         
         self._advance_turn_queue(msg)
+
+    def _calculate_military_power(self, player_id):
+        power = 0
+        for unit in self.units:
+            if unit.owner_id == player_id and unit.unit_type == 'army':
+                power += unit.creation_research_level
+        return power
+
+    def _check_for_combat(self, moving_army):
+        hex_coord = moving_army.current_hex
+        # Find other armies on the same tile from different players
+        defenders = [u for u in self.units if u.current_hex == hex_coord and u.owner_id != moving_army.owner_id and u is not moving_army and u.unit_type == 'army']
+        if defenders:
+            defender = defenders[0]
+            return self._resolve_combat(moving_army, defender)
+        return None
+
+    def _resolve_combat(self, army1, army2):
+        p1_id = army1.owner_id
+        p2_id = army2.owner_id
+        p1_power = self._calculate_military_power(p1_id)
+        p2_power = self._calculate_military_power(p2_id)
+
+        underdog_win_prob = 0.6
+        roll = random.random()
+
+        winner, loser = (None, None)
+
+        if p1_power < p2_power:  # Player 1 is underdog
+            if roll < underdog_win_prob:
+                winner, loser = army1, army2
+            else:
+                winner, loser = army2, army1
+        elif p2_power < p1_power:  # Player 2 is underdog
+            if roll < underdog_win_prob:
+                winner, loser = army2, army1
+            else:
+                winner, loser = army1, army2
+        else:  # Equal power
+            if roll < 0.5:
+                winner, loser = army1, army2
+            else:
+                winner, loser = army2, army1
+        
+        if loser in self.units:
+            self.units.remove(loser)
+        
+        self.audio.play('error')  # A battle sound
+
+        return f"Battle! P{winner.owner_id + 1}'s army defeated P{loser.owner_id + 1}'s army!"
 
     def update(self):
         if self.founder:
@@ -407,6 +513,7 @@ class Controller:
 
     def draw(self):
         self.toolbar_rects = self.view.draw_frame(
+        self.ui_rects = self.view.draw_frame(
             self.grid, 
             self.cities, 
             self.founder, 
@@ -420,6 +527,10 @@ class Controller:
             self.selected_power,
             self.selected_city,
             self.player_stats
+            self.player_stats,
+            self.toolbar_collapsed,
+            self.text_expanded,
+            self.current_text
         )
 
     def get_player_cities(self, player_index):
@@ -459,7 +570,28 @@ class Controller:
                 stats['resources'][tile.element] += 2
 
     def next_player(self, last_action_msg=""):
+        if self.whisper_target_player is not None and self.whisper_target_player == self.current_player:
+            self.god_whisper = ""
+            self.whisper_target_player = None
+            
         self.current_player = (self.current_player + 1) % self.num_players
+        
+        # CITY CAPTURE LOGIC for the NEW current player
+        captured_cities_msgs = []
+        armies_of_new_player = [u for u in self.units if u.owner_id == self.current_player and u.unit_type == 'army']
+        for unit in armies_of_new_player:
+            city_on_tile = self.get_city_at_hex(unit.current_hex)
+            if city_on_tile and city_on_tile.owner_id != self.current_player:
+                original_owner = city_on_tile.owner_id
+                city_on_tile.owner_id = self.current_player
+                city_on_tile.color = self.player_colors[self.current_player]
+                # Update the city center tile's owner color
+                tile = self.grid_dict.get(city_on_tile.current_hex)
+                if tile:
+                    tile.owner = city_on_tile.color
+                captured_cities_msgs.append(f"P{self.current_player + 1} captured a city from P{original_owner + 1}!")
+                self.audio.play('found_city')  # Capture sound
+        
         
         # Resource collection
         stats = self.player_stats[self.current_player]
@@ -498,6 +630,14 @@ class Controller:
         self.current_action_entity = self.turn_queue.pop(0) if self.turn_queue else "CITY"
         
         base_msg = f"Player {self.current_player + 1}'s turn."
+        
+        if captured_cities_msgs:
+            capture_summary = " ".join(captured_cities_msgs)
+            if last_action_msg:
+                last_action_msg = f"{last_action_msg} {capture_summary}"
+            else:
+                last_action_msg = capture_summary
+
         if last_action_msg:
             self.instructions_text = f"{last_action_msg} {base_msg}"
         else:
